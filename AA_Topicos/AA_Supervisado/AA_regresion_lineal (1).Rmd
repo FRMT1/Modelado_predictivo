@@ -1,0 +1,460 @@
+---
+title: 'Aprendizaje automático: regresión lineal'
+author: "Félix R. Millán-Trujillo"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_deph: 2
+    toc_float: yes
+    theme: darkly
+---
+
+```{css, echo = FALSE}
+.columns {display: flex;}
+title{
+color: orange;
+font_size: 35px;
+}
+h1{
+color: orange;
+font_size: 30px;
+}
+h2{
+color: orange;
+font_size: 20px;
+}
+
+```
+
+<p justify-content:flex-start>
+<br />
+<br />
+
+# Introducción {#principio}
+
+La regresión lineal (en los parámetros), es una de las tecnologías más utilizadas del aprendizaje automático o *machine learning*. Mediante el ajuste por mínimos cuadrados, se logra el mejor ajuste posible a los datos observados. Para ilustrar el procedimiento, se utilizará la base de datos **AmesHousing::make_ames**, y se emplearán algunas bibliotecas del lenguaje de programación R:
+
+* caret
+* ggplot2
+* grid.Extra
+* rsm
+* dplyr
+* pls
+* vip
+
+La base de datos consta de 2930 observaciones correspondientes a 81 variables que determinan el precio de venta de las viviendas.
+
+Los ajustes regresionales se hicieron con el paquete **Caret**, en lugar de utilizar la función **lm**, ya que permite incorporar en el entrenamiento la validación cruzada. Con esta, los datos se dividen en datos de entrenamiento y datos de validación, pero no solo una vez, sino que el procedimiento se repite 10 veces. Es decir, se generan aleatoriamente 10 grupos de entrenamiento y validación, a fin de obtener la medida más representativa de la **Raiz del Cuadrado Medio del error** (*RMSE*). Esta medida representa la diferencia promedio entre los valores observados y los predichos por el modelo.
+
+
+# Ajuste por mínimos cuadrados con caret
+
+Se ajustaron cuatro modelos de regresión:
+
+* Modelo 1: Sale_Price ~ Gr_Liv_Area
+* Modelo 2: Sale_Price ~ Gr_Liv_Area + Year_Built
+* Modelo 3: Sale_Price ~ Gr_Liv_Area + Year_Built + Gr_Liv_Area:Year_Built
+* Modelo 4: Sale_Price ~ .,
+
+El **Modelo 1** es una regresión lineal simple del precio de venta de las viviendas en función del número de pies cuadrados. El **Modelo 2** en una regresión lineal múltiple sin término de interacción, del precio de venta como función de los pies cuadrados y los años de construcción de la vivienda. El **Modelo 3** en una regresión lineal múltiple con término de interacción, del precio de venta como función de los pies cuadrados y los años de construcción de la vivienda. Por último, el **Modelo 4** es una regresión lineal múltiple del precio de venta, en función de las 80 variables restantes de la base de datos.
+
+
+## Modelo 1
+
+Lo primero, será llamar las bibliotecas que se requerirán:
+
+```{r}
+library(AmesHousing)
+library(caret)
+library(ggplot2)
+library(gridExtra)
+```
+
+
+```{r}
+set.seed(123)
+Modelo1 <- train(data = AmesHousing::make_ames(),
+                 Sale_Price ~ Gr_Liv_Area,
+                 method = "lm") 
+Modelo1
+```
+
+
+Para el ajuste de este modelo, no se realizó la validación cruzada, sin embargo, el paquete **Caret** ejecutó 25 veces el ajuste por mínimos cuadrados (nótese que cada muestra es de 2930 observaciones), lo cual no era necesario, ya que bastaba con hacerlo una sola vez, como lo hace la función **lm**. Nótese que el **RMSE** es de 56950 $. Es decir, que la diferencia promedio entre los valores observados y los predichos por el modelo es de ese monto. El objetivo en los siguientes modelos, será reducir esa cantidad. veamos ahora los coeficientes:
+
+```{r}
+summary(Modelo1)
+```
+
+La ecuación ajustada es:
+
+$$
+\hat{y} = \beta_0 + \beta_1x_1 + \epsilon
+$$
+
+Notamos que $\beta_1=112$. Es decir, el precio de venta de las viviendas se incrementa en 112 dólares, por cada pie cuadrado adicional en la vivienda. Al dividir el coeficiente calculada entre su error estándar, obtenemos el estadístico $t$ asociado al coeficiente. Para este caso es 54; es decir, el coeficiente se aleja 54 desviaciones estándar del cero, por lo que es un predictor de gran influencia.
+
+Sin embargo, la elevada magnitud del **RMSE** hace necesario el ajuste de modelos más complejos.
+
+A continuación, el modelo ajustado a los datos:
+
+```{r fig.align='center'}
+ggplot(data = AmesHousing::make_ames(), aes(Gr_Liv_Area,Sale_Price))+
+  geom_point(size = 1, alpha = 0.5)+
+  geom_smooth(method = "lm")
+```
+
+
+## Modelo 2
+
+El modelo a ajustar es el siguiente:
+
+$$
+\hat{y} = \beta_0 + \beta_1x_1 + \beta_2x_2 + \epsilon
+$$
+
+
+```{r}
+set.seed(1234)
+ames <- AmesHousing::make_ames()
+Modelo2 <- train(data = ames,
+                 Sale_Price ~ Gr_Liv_Area + Year_Built,
+                 method = "lm",
+                 trControl = trainControl(method = "cv", number = 10))
+Modelo2
+```
+
+Para el ajuste del Modelo 2 sí se empleó el método de validación cruzada en caret, donde se tomaron aleatoriamente 10 muestras de:
+
+* 2636 datos de entrenamiento y 294 datos de validación.
+* 2638 datos de entrenamiento y 292 datos de validación.
+* Etc.
+
+Nótese que el **RMSE** descendió a 46527 dólares, como promedio, entre el valor observado y el predicho. veamos los coeficientes:
+
+```{r}
+summary(Modelo2)
+```
+
+Ambos coeficientes son fuertes predictores (notablemente alejados del cero) del precio de venta de las casas. Podemos, como se hizo con el Modelo1, interpretar los coeficientes: Nótese que el precio de venta incrementa alrededor de 1000 dólares con cada año de incremento del inmueble (inmuebles más recientes). Observemos los gráficos para ambas variables:
+
+```{r fig.align='center'}
+p1 <- ggplot(data = ames, aes(Gr_Liv_Area,Sale_Price))+
+  geom_point(size = 1, alpha = 0.5)+
+  geom_smooth(method = "lm")
+p2 <- ggplot(data = ames, aes(Year_Built,Sale_Price))+
+  geom_point(size=1, alpha =0.5)+
+  geom_smooth(method = "lm")
+gridExtra::grid.arrange(p1,p2,nrow = 1)
+```
+
+
+Es importante observar como la suposición de linealidad entre la variable respuesta y las variables predictoras, parece violarse para el caso de los años de construcción. Sin embargo, la tendencia es efectivamente y como lo indica el coeficiente parcial de regresión, al aumento del precio de venta de las casas conforme el año de construcción es más reciente. Esta interacción la veremos en el Modelo 3.
+
+
+## Modelo 3
+
+Este modelo contempla la interacción entre las variables:
+
+$$
+\hat{y} = \beta_0+\beta_1x_1+\beta_2x_2+\beta_{12}x_1x_2+\epsilon
+$$
+
+```{r}
+set.seed(1234)
+Modelo3 <- train(data = ames,
+                 Sale_Price ~ Gr_Liv_Area + Year_Built +
+                   Gr_Liv_Area:Year_Built,
+                 method = "lm",
+                 trControl = trainControl(method = "cv", number = 10))
+Modelo3
+summary(Modelo3)
+
+```
+
+La raíz del cuadrado medio del error (**RMSE**) descendió un poco más y se nota la fuerte interacción entre ambas variables. Ahora, la diferencia promedio entre los precios de venta observados y predichos es alrededor de 45675 dólares.
+
+A fin de conocer la interacción entre las variables predictoras, utilizaremos la biblioteca **rsm** (Response Surface Methodology) y relizaremos un gráfico de contornos.
+
+```{r fig.align='center'}
+library(rsm)
+Modelo3.rsm <- rsm(Sale_Price ~ 
+                     FO(Gr_Liv_Area,Year_Built)+
+                     TWI(Gr_Liv_Area,Year_Built), data = ames)
+contour(Modelo3.rsm, ~ Gr_Liv_Area + Year_Built +
+          Gr_Liv_Area:Year_Built, image = TRUE)
+```
+
+Efectivamente, el mayor precio de venta se da en los inmuebles màs recientes con la mayor área de construcción (zona hacia el rojo).
+
+## Modelo 4
+
+En este último modelo se considerarán las 80 variables predictoras. Espera entonces obtener una mejor predicción del precio de venta de las casas.
+
+```{r}
+set.seed(1234)
+Modelo4 <- train(data = ames,
+                 Sale_Price ~ .,
+                 method = "lm",
+                 trControl = trainControl(method = "cv", number = 10))
+Modelo4
+```
+
+Finalmente, considerando los 80 predictores, la desviación promedio entre el precio de venta observado y el predicho, descendió a 34176 dólares.
+
+# Suposiciones en los modelos de regresión
+
+Al aplicar modelos de regresión lineal se debe tener en cuenta que se satisfacen ciertas suposiciones:
+
+* Se asume que la relación entre la variable respuesta y los predictores, es   lineal.
+* Varianza constante de los residuales (homogeneidad de la varianza).
+* Los residuales no deben estar correlacionados.
+* Los residuales deben estar normalmente distribuidos.
+
+Todo lo anterior puede resumirse en que los residuales $e$ deben ser independientes y:
+
+$$
+e \sim N(0,\sigma²)
+$$
+
+## Suposición de linealidad
+
+Anteriormente, vimos que la relación entre el precio de venta y el año de construcción, exhibía un comportamiento alejado de la linealidad. Esta desviación puede corregirse con una trasnformación de los datos. Especificamente, tomaremos el logaritmo decimal del precio de venta y comprobaremos su efecto en la linealidad de las variables:
+
+```{r fig.align='center'}
+p1 <- ggplot(data = ames, aes(Year_Built,Sale_Price))+
+  geom_point(size = 1, alpha = 0.5)+
+  geom_smooth(se = FALSE)+
+  scale_y_continuous("Precio de venta", labels = scales::dollar,
+                     breaks = seq(0,800000,by=100000))+
+  xlab("Año de la construcción")+
+  ggtitle("Variable sin transformar")
+p2 <- ggplot(data = ames, aes(Year_Built,Sale_Price))+
+  geom_point(size=1, alpha =0.5)+
+  geom_smooth(method = "lm", se = FALSE)+
+  scale_y_log10("Precio de venta", labels = scales::dollar,
+                breaks = seq(0,600000,by = 100000))+
+  xlab("Año de la construcción")+
+  ggtitle("Variable transformada")
+gridExtra::grid.arrange(p1,p2,nrow = 1)
+```
+
+## Suposición de homogeneidad de varianza
+
+Para corroborar la homogeneidad de la varianza de los residuales, construiremos el gráfico de los residuales del modelo, en función de los valores predichos. No debería observarse ningún patrón en los residuales. Generalmente, conforme aumenta el número de predictores, la varianza tiende a hacerse homogénea. Si esto no funciona, también es útil la transformación de los datos.
+
+
+```{r fig.align='center'}
+f1 <- data.frame(P = fitted(Modelo1), R = residuals(Modelo1))
+p1 <- ggplot(f1, aes(P, R))+
+  geom_point(size=1, alpha = 0.5)+
+  xlab("Valores predichos")+
+  ylab("Residuales")+
+  ggtitle("Modelo 1", subtitle = "Precio de venta ~ Pies cuadrados")
+
+f2 <- data.frame(P = fitted(Modelo4), R = residuals(Modelo4))
+p2 <- ggplot(f2, aes(P, R))+
+  geom_point(size=1, alpha = 0.5)+
+  xlab("Valores predichos")+
+  ylab("Residuales")+
+  ggtitle("Modelo 4", subtitle = "Precio de venta ~ .")
+gridExtra::grid.arrange(p1,p2,nrow = 1)
+
+```
+
+
+En el cuarto Modelo se satisface la homogeneidad de varianza, en tanto que en el modelo 1, no.
+
+## Suposición de independencia
+
+Para corroborar este supuesto, vamos a utilizar el paquete **dplyr** y la función **mutate**, a fin de construir un gráfico de los residuales como función del orden de corrida. Si los residuales son independientes, no debería observarse ningún patrón en ellos.
+
+```{r fig.align='center'}
+library(dplyr)
+f2 <- mutate(f2, RN = row_number())
+ggplot(data = f2, aes(RN,R))+
+  geom_point(size = 1, alpha = 0.5)+
+  geom_smooth(se = FALSE)+
+  xlab("Orden de corrida")+
+  ylab("Residuales")+
+  ggtitle("Modelo 4",subtitle = "Independencia de los residuales")
+```
+
+Es muy ùtil incorporar la función **geom_smooth** en este gráfico, ya que una pendiente cercana a cero indica que los residuales no están relacionados.
+
+## Suposición de normalidad
+
+Por último comprobaremos el supuesto de normalidad. Para ello, se contruirá el gràfico de cuantiles teóricos *vs* observados. Se comprueba la distribución normal de los residuales si la relación entre los cuantiles es lineal; es decir, si la distribución observada de los datos se corresponde con la distribución teórica (normal en este caso)
+
+```{r fig.align='center'}
+y <- f2$R
+qqnorm(y)
+qqline(y)
+```
+
+Los residuales generados por el **Modelo 4** parecen violar el supuesto de normalidad, aun cuando la mayoría de los datos se encuentran alrededor del percentil 50 (cuantil teórico 0), hasta 1 desviación estándar. Este tipo de situación es muy frecuente en la experimentación y ante la duda, la sugerencia es realizar una prueba formal como el estadístico de Kolmogorov-Smirnov. En R, la función **ks.test** nos permite desarrollar el estadístico.
+
+```{r}
+ks.test(ames$Sale_Price,"pnorm", mean = 0, sd = 1)
+```
+
+Como se observa, la probabilidad asociada al estadístico es mucho menor al valor $\alpha=0.05$, por lo que efectivamente, los datos no siguen una distribución normal. En estos casos, lo recomendable es transformar la variable respuesta con el fin de normalizar los datos. Las transformaciones más usadas son:
+
+* Raiz cuadrada.
+* Recíproco.
+* Logaritmo natural.
+
+Ninguna de estas transformaciones fue efectiva con los datos utilizados en este ejemplo.
+
+Vamos a emplear la **transformación Box-Cox**, mediante la función **boxcox** del paquete **MASS**. Esta transformación propone que para obtener la normalidad de los residuales, la variable respuesta debe estar elevada a una potencia lambda:
+
+$$
+y* = y^{\lambda}
+$$
+
+```{r fig.align='center'}
+library(MASS)
+set.seed(123)
+bc <- boxcox(Sale_Price ~ ., data = ames)
+```
+
+La ordenada máxima del gráfico anterior es la potencia $\lambda$ a la cual debe ser elevada la variable respuesta para satisfacer la normalidad de los residuales. Para saber exactamente el valor de la potencia, necesitamos el siguiente código:
+
+```{r}
+lambda <- bc$x[which.max(bc$y)]
+lambda
+```
+
+Es decir, la variable respuesta debe ser elevada a la potencia $\lambda = 0.2626$. Procederemos a realizar la transformación:
+
+```{r}
+ames$Sale_Price <- (ames$Sale_Price)^0.2626
+```
+
+Entrenamos de nuevo el modelo:
+
+```{r}
+set.seed(1234)
+Modelo4 <- train(data = ames,
+                 Sale_Price ~ .,
+                 method = "lm",
+                 trControl = trainControl(method = "cv", number = 10))
+Modelo4
+```
+
+Y por ùltimo procedemos a calcular los residuales del modelo y evaluar su normalidad. Nótese que la raiz del cuadrado medio del error se redujo considerablemente y que el modelo explica alrededor del 85% de la variabilidad de los datos experimentales.
+
+```{r}
+r <- residuals(Modelo4)
+qqnorm(r)
+qqline(r)
+```
+
+
+```{r}
+ks.test(r,"pnorm",mean = 0, sd = 1)
+```
+
+Aunque se mejora un poco la distribución, la transformación Box-Cox no logra satisfacer la normalidad de los residuales.
+
+Probemos ahora la **transformación Johnson**, la cual se puede realizar en R con el paquete del mismo nombre y la función **RE.Johnson**. Esta transformación consiste de una familia de funciones:
+
+**SB**
+$$
+y = \gamma +\eta ln \left(\frac{x-\epsilon}{\lambda+\epsilon-x}\right)
+$$
+
+**SL**
+$$
+y = \gamma+\eta ln\left(x-\epsilon\right)
+$$
+
+**SU**
+$$
+y = \gamma + \eta\sinh^{-1}\left(\frac{x-\epsilon}{\lambda}\right)
+$$
+
+Donde $\gamma$, $\epsilon$, $\eta$ y $\lambda$ son los parámetros de las funciones, *x es la variable respuesta* e *y es la variable respuesta transformada*.
+
+Para proceder a la transformación de Johnson, propongo el siguiente código:
+
+```{r}
+library(Johnson)
+ames <- AmesHousing::make_ames()
+var_transfor <- RE.Johnson(ames$Sale_Price)
+var_transfor$`function`
+var_transfor$f.gamma
+var_transfor$f.lambda
+var_transfor$f.epsilon
+var_transfor$f.eta
+```
+
+
+Observemos que la función ajustada fue **SU** y que $\gamma=-1.387$, $\lambda=48541.74$, $\epsilon =100615.4$ y $\eta = 1.322$. Comprobemos ahora si se satisface la normalidad de la variable respuesta transformada
+
+
+```{r fig.align='center'}
+qqnorm(var_transfor$transformed)
+qqline(var_transfor$transformed)
+ks.test(var_transfor$transformed,"pnorm")
+```
+
+Finalmente, se puede observar tanto en el gráfico de normalidad, como en la prueba de Kolmogorov, que no existen razones para rechazar la hipótesis nula de distribución normal de los datos y que por lo tanto, se satisfacen todos los supuestos para el Modelo 4.
+
+Es la dificultad para satisfacer los supuestos, la razón por la cual otras tecnologías de *machine learning* son más eficientes que la regresión lineal.
+
+
+# Regresión por mínimos cuadrados parciales (PLSR)
+
+El modelo 4 contempla 80 variables predictoras, pero ¿en realidad son todas esas variables necesarias?¿no podrían seleccionarse aquellos predictores realmente importantes y ajustar el modelo con ellos? De hecho, construir el modelo con las variables predictoras más importantes, mejora significativamente la habilidad predictiva del mismo. En este sentido, la **regresión por mínimos cuadrados parciales** es una tecnología que ajusta el modelo en dos etapas: en la primera, determina los componentes principales o términos predictores con la mayor variabilidad; es decir correlaciona los predictores y determina aquellas combinaciones de predictores (denominados componentes o nuevos predictores), que tengan la más pequeña correlación (máxima variabilidad). Pero, a diferencia de la **regresión de componentes principales**, no solo conforma nuevos predictores con la menor correlación, sino que al mismo tiempo evalua la correlación de los nuevos predictores (componentes) con la variable respuesta (segunda etapa). De esta manera, la regresión por mínimos cuadrados parciales es una técnica de **reducción de dimensión supervisada** que se lleva a cabo bajo el algoritmo **NIPALS** (*nonlinear iterative partial least squares*).
+
+El objetivo, es reducir aun más la **RMSE** del modelo. Veamos un ejemplo con Caret:
+
+```{r}
+library(pls)
+set.seed (123)
+model_pls <- train(data = ames,
+                   Sale_Price ~ .,
+                   method = "pls",
+                   preProcess = c("zv","scale","center"),
+                   trControl = trainControl(method = "cv", number = 10),
+                   tuneLength = 20)
+```
+
+
+Dada las diferencias entre los términos predictores en términos de unidades y dimensiones, es necesario preprocesar los datos, estableciendo una escala anclada al valor mínimo y eliminando los datos con varianza cero (màxima correlación en el espacio predictor). Una vez ejecutados los dos pasos explicados con anterioridad, podemos conocer el número de componentes que conforman el modelo óptimo:
+
+
+```{r}
+model_pls$bestTune
+```
+
+
+El modelo óptimo está conformado por 9 predictores (9 combinaciones lineales de los predictores originales), logrando reducir la **RMSE** a 29267 USD, en comparación con los 34177 USD del modelo original.
+
+
+```{r fig.align='center'}
+model_pls
+ggplot(model_pls)
+```
+
+
+Para conocer los componentes con un mayor peso de correlación con la variable respuesta, utilizaremos el paquete **vip**.
+
+
+```{r fig.align='center'}
+library(vip)
+vip(model_pls, num_features = 20, method = "model")
+```
+
+
+Como puede verse, las estrategias de mercadeo deberían orientarse hacia el área tottal de la vivienda, viviendas de un solo piso y el área del estacionamiento.
+
+</p>
+<br />
+
+
+<a href="#principio">
+Volver al principio
+</a>
