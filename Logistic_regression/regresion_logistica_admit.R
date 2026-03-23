@@ -1,0 +1,80 @@
+data <- read.csv("~/Modelado_predictivo/machine_learning/Logistic_regression/admit.csv",
+                 header = T)
+str(data)
+data$rank <- as.factor(data$rank)
+data$admit <- as.factor(data$admit)
+summary(data)  # Hay un desbalance de clases
+
+set.seed(123)
+id <- sample(2, nrow(data), replace = T, prob = c(0.80,0.20))
+train <- data[id == 1,]
+test <- data[id == 2,]
+
+model1 <- glm(admit ~ ., data = train, family = 'binomial')  # Regresión logística
+p1 <- predict(model1, test, type = 'response')
+head(p1)
+summary(model1)
+
+model2 <- glm(admit ~ gpa+rank, data = train, family = 'binomial') # Con términos importantes
+p2 <- predict(model2, test, type = 'response')
+summary(model2)
+head(p2)
+###############################################################
+# Predicción de la probabilidad
+
+head(test)
+y <- -4.0346+(1.2525*3.19)+(-1.5576*1)
+y
+probability <- exp(-1.596725) / (1 + exp(-1.596725))
+probability  
+####################################################################  
+pred <- ifelse(p2 > 0.5, 1, 0)
+
+mc <- table(Predichos = pred, Observados = test$admit) # El modelo predice muy bien clase dominante
+mc
+accuracy <- sum(diag(mc)) / sum(mc)
+accuracy
+missclasification <- 1 - accuracy
+missclasification
+sensibility <- 4 / (14+4)
+sensibility    # No es un buen modelo para predecir los que serán admitidos
+
+######################################################################################
+
+# Corrección del desbalance de clases y ajuste del modelo de ML
+
+library(ROSE)
+
+rose <- ROSE(admit ~ gpa + rank, data = data, seed = 123, N = 600)$data
+table(data$admit)
+prop.table(table(data$admit))
+table(rose$admit)
+prop.table(table(rose$admit))
+
+set.seed(345)
+id <- sample(2, nrow(rose), replace = T, prob = c(0.80,0.20))
+train <- rose[id == 1,]
+test <- rose[id == 2,]
+
+model_balanced <- glm(admit ~ gpa+rank, data = rose, family = 'binomial')
+pf <- predict(model_balanced, test, type = 'response')
+pred <- ifelse(pf > 0.5, 1, 0)
+mc <- table(Predichos = pred, Observados = test$admit)
+mc
+
+accuracy <- sum(diag(mc)) / sum(mc)
+accuracy
+missclasification <- 1 - accuracy
+missclasification
+sensibility <- 35 / 50
+sensibility           # Incrementó considerablemente la sensibilidad del modelo
+
+
+library(caret)   # Corroborando la matriz de confusión con Caret
+
+mc_caret <- confusionMatrix(
+  data = factor(pred),
+  reference = factor(test$admit),
+  positive = '1'
+)
+mc_caret
