@@ -1,0 +1,141 @@
+---
+title: 'Red neuronal: aprendizaje profundo'
+author: "Félix R. Millán Trujillo"
+date: "2020"
+output: html_document
+---
+En este documento se entrenará y evaluará una red neuronal de aprendizaje profundo. Para ello, se utilizará la base de datos **College** de la biblioteca **ISLR**. Esta base de datos consta de 18 variables, para un total de 777 observaciones. Se trata de predecir la procedencia de una institución pública o privada, como función de una serie de variables inherentes a las distintas instituciones universitarias consideradas. El proceso de diseño, entrenamiento y evaluación de la red neuronal se llevará a cabo en tres etapas:
+
+* Preparación de los datos
+* Entrenamiento de la red
+* Evaluación de la capacidad predictiva
+
+### Preparación de los datos
+
+En primer lugar, especificamos las librerías a utilizar: **ISLR** y **neuralnet** y definimos como datos crudos (**crude_data**), la base de datos **College**. la función **head** permite visualizar las seis primeras filas de la estructura de datos, en tanto que la función **str**, muestra la naturaleza de cada variable.
+
+```{r}
+library(ISLR)
+library(neuralnet)
+crude_data = College
+head(crude_data)
+str(crude_data)
+```
+
+La primera variable (**Private**), será la variable dependiente que está en función de las 17 variables restantes. Nótese que es un factor y dado que la red neuronal es un modelo matemático, todas las variables deben ser numéricas, por lo que es necesario transformar el factor **Private** en una variable numérica
+
+```{r}
+private <- as.numeric(crude_data$Private)
+```
+
+Reestructuramos de nuevo la base de datos con la función **cbind**
+
+```{r}
+data <- cbind(private,crude_data[2:18])
+str(data)
+```
+
+Ahora, **todas las variables son numéricas**. Dado que los números que componen el **dataframe** son apreciablemente disímiles, es conveniente y necesario normalizar los datos, a fin de facilitar la convergencia de la red durante el entrenamiento. La normalización se hará con el método de máximos y mínimos, de acuerdo a la ecuación:
+
+$$
+x_{normalizado}=\frac{x-x_{mínimo}}{x_{máximo}-x_{mínimo}}
+$$
+
+En el siguiente bloque, se definirá la función previamente especificada y se aplicará con la función **sapply** a la base de datos
+
+```{r}
+normalize <- function(x){
+    (x-min(x))/(max(x)-min(x))
+}
+normalized_data <- sapply(data, FUN = normalize)
+head(normalized_data)
+```
+
+Ahora, toda la información numérica del **dataframe** oscila entre 0 y 1; esto, facilitará el entrenamiento y la convergencia, como se mencionó con anterioridad.
+
+El proceso de diseñar una red neuronal, consta de una etapa de entrenamiento y otra de evaluación de la habilidad predictiva. Generalmente podemos utilizar el 70% de la base de datos para el entrenamiento y el 30% para la evaluación (70:30). Para ello, se tomará una muestra aleatoria con la función **sample** y los datos normalizados se dividirán en dos conjuntos.
+
+```{r}
+sample <- sample(1:nrow(data),round(0.70*nrow(data)))
+sample
+```
+
+El tamaño de muestra para el entrenamiento es de
+
+```{r}
+0.70*777
+```
+
+como se puede constatar en el bloque anterior y dado que se utilizó la función **round**, el tamaño de muestra fue de 544 observaciones. A continuación se definirán los objetos de entrenamiento y evaluación, con los nombres **training_data** y **test_data**, respectivamente
+
+```{r}
+training_data <- as.data.frame(normalized_data[sample,])
+str(training_data)
+test_data <- as.data.frame(normalized_data[-sample,])
+str(test_data)
+```
+
+Obsérvese los dos conjuntos, uno de 544 observaciones y otro de 233. Ya los datos han sido transformados y organizados, lo cual representa el mayor esfuerzo para el diseño de una red neuronal.
+
+### Entrenamiento de la red neuronal
+
+Antes de definir y entrenar la red, es necesario establecer la relación funcional entre las variables, de acuerdo al criterio mencionado al principio del documento
+
+```{r}
+f <- as.formula(private~Apps+Accept+Enroll+Top10perc+Top25perc+
+                    F.Undergrad+P.Undergrad+Outstate+Room.Board+
+                    Books+Personal+PhD+Terminal+S.F.Ratio+
+                    perc.alumni+Expend+Grad.Rate)
+f
+```
+
+El siguiente bloque de código **es el centro del documento**. Se define un perceptrón multicapa con dos capas de neuronas ocultas de 6 y 5 neuronas, respectivamente.
+
+```{r}
+deep_net <- neuralnet(f,data = training_data,hidden = c(6,5),
+                      linear.output = FALSE)
+plot(deep_net)
+```
+
+A continuación, se muestra la arquitectura neuronal de la red entrenada
+
+```{r echo = FALSE, fig.align='center'}
+knitr::include_graphics('/home/profesor/Imágenes/RDeepNet.png')
+```
+
+### Evaluación de la red
+
+Procederemos ahora a evaluar el modelo neuronal. Crearemos para ello un objeto **predicted_data** y se utilizará la función **compute**.
+
+```{r}
+predicted_data <- compute(deep_net,test_data[,2:18])
+head(predicted_data$net.result)
+```
+
+Dado que los valores predichos por la red se muestran con decimales, se utilizará las funciones **sapply** y **round** para generar valores de 0 o 1, donde 1 significa proveniente de una escuela privada.
+
+```{r}
+predicted_data$net.result <- sapply(predicted_data$net.result,
+                                    round, digits=0)
+head(predicted_data$net.result)
+```
+
+Se organizan los valores actuales y predichos en un **dataframe**
+
+```{r}
+results <- data.frame(Actual=test_data$private,
+                 Predichos=predicted_data$net.result)
+head(results)
+```
+
+Por último, se elabora una tabla de contingencia con la función **table** a partir de los valores actuales y predichos, a fin de determinar la precisión de la red
+
+```{r}
+cont_table <- table(results)
+cont_table
+```
+
+Como se observa en la tabla de contingencia, a partir de los datos de evaluación (233), el modelo neuronal tiene una precisión superior al 90%. Puede probarse otra estructura neuronal, con más capas ocultas o más neuronas por capa oculta, a fin de incrementar la precisión de la red.
+
+
+

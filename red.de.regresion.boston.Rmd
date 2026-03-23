@@ -1,0 +1,84 @@
+---
+title: "Red neuronal de regresión"
+author: "Félix R. Millán Trujillo"
+date: "2020"
+output: html_document
+---
+
+Se utilizará la base de datos **Boston** de la biblioteca **MASS** para construir una red neuronal de regresión. La variable dependiente será la mediana del valor de la vivienda *medv*, la cual está en función de 13 variables predictoras.
+
+En este primer bloque de código, se muestra el encabezado de la base de datos
+
+```{r}
+library(MASS)
+library(neuralnet)
+data=Boston
+head(data)
+```
+
+
+### Preparación de los datos
+
+La base de datos consta de 506 observaciones que serán utilizadas para el entrenamiento de la red. Dado que los datos son bastante disímiles, se procederá a transformarlos para facilitar la convergencia de la red durante el aprendizaje supervisado.
+
+```{r}
+data_max <- apply(data,2,max)
+data_min <- apply(data,2,min)
+data_scaled <- scale(data, center = data_min, scale = 
+                         data_max-data_min)
+head(data_scaled)
+```
+
+En el bloque anterior se determinó el valor máximo (**max**) y mínimo (**min**) para cada columna (**2**) del dataframe con la función **apply**. Luego se procedió a transformar los datos de acuerdo a la expresión
+
+$$x_{scaled} = \frac{x - x_{min}}{x_{max}-x_{min}}$$
+
+Como se observa en el encabezado de los datos transformados, ahora las observaciones oscilan entre 0 y 1, lo cual, como se dijo anteriormente, facilita la convergencia del modelo neuronal.
+
+
+### Entrenamiento de la red neuronal
+
+Para construir el modelo neuronal, primero se establece la relación funcional entre las variables (**f**). Luego, se especifica el número de capas ocultas y el número de neuronas en cada capa oculta. La función de activación utilizada fue la tangente hiperbólica (**tanh**).
+
+```{r}
+f <- as.formula(medv~crim+zn+indus+chas+nox+rm+age+dis+rad+tax+
+                    ptratio+black+lstat)
+f
+nnet <- neuralnet(f, data = data_scaled,
+                  hidden = c(7,7),
+                  act.fct = "tanh")
+plot(nnet)
+```
+
+```{r echo=FALSE,fig.align='center'}
+knitr::include_graphics('/home/profesor/Imágenes/red de regresion.png')
+``` 
+
+
+### Evaluación de la red entrenada
+
+La red ya entrenada, se utilizó para predecir los valores del dataframe (**compute**). Lo correcto es utilizar otro conjunto de datos.
+
+Dado que la red predice los valores transformados,es necesario restablecer los valores originales (**pred_nnet**), a partir de la ecuación utilizada anteriormente.
+
+```{r}
+eval_nnet <- compute(nnet,data_scaled)
+pred_nnet <- eval_nnet$net.result*(max(data$medv)-min(data$medv))+
+    min(data$medv)
+```
+
+A continuación, se resume en un dataframe (**cbind**), los valores observados y los valores predichos por el modelo neuronal, a fin de evaluar estadísticamente la habilidad predictiva del modelo neuronal
+
+```{r}
+final_output <- cbind(data$medv,as.data.frame(pred_nnet))
+colnames(final_output) <- c("Observados","Predichos")
+head(final_output)
+x <- final_output$Observados
+y <- final_output$Predichos
+plot(y~x,xlab = "Observados",ylab = "Predicción neuronal")
+abline(z <- lm(y~x))
+points(x,y,col = "dark blue")
+summary(z)
+```
+
+Como puede observarse, el modelo neuronal es capaz de predecir aproximadamente un 95% de la variabilidad experimental.

@@ -1,0 +1,100 @@
+---
+title: "Regresión no lineal (nls y nls2)"
+author: "Millán Trujillo, F. R."
+date:
+output: html_document
+---
+
+Se utilizará la base de datos *Chwirut2* del paquete *NISTnls* del Instituto Nacional de Estándares y Tecnología (NIST por sus siglas en inglés). Lo datos corresponden a la respuesta ultrasónica como función de la distancia del metal empleado. La relación funcional se puede observar en el siguiente gráfico:
+
+
+```{r, fig.align='center'}
+library(NISTnls)
+plot(y~x, data = Chwirut2,
+     main = "Respuesta ultrasónica (NIST)",
+     xlab = "Distancia del metal (mm)",
+     ylab = "Respuesta ultrasónica")
+```
+
+
+
+Se desea modelar los datos con la función:
+
+
+$$
+f(x,(\beta_1,\beta_2,\beta_3))=\frac{e^{-\beta_1x}}{\beta_2+\beta_3x}
+$$
+
+
+Lo primero que vamos a hacer es definir la función en R:
+
+
+```{r}
+f <- function(x, beta1, beta2, beta3){
+  exp(-beta1*x)/(beta2+beta3*x)
+}
+```
+
+
+Ahora vamos a encontrar los valores iniciales de los predictores a fin de desarrollar el método iterativo de Gauss-Newton. Para ello crearemos una malla de valores iniciales y utilizaremos el algoritmo de *fuerza bruta* del paquete *nls2*. crearemos primero la malla ("grid"):
+
+
+```{r}
+malla <- expand.grid(list(beta1 = seq(0.1,1,by = 0.1),
+                          beta2 = seq(0.01,0.05, by = 0.01),
+                          beta3 = seq(0.1,1,by = 0.1)))
+```
+
+
+Ahora sí, una vez definida la función y un rango de potenciales valores de los coeficientes predictores, procederemos a forzar la estimación de los valores iniciales de tales coeficientes:
+
+
+```{r}
+library(nls2)
+sub_model <- nls2(y ~ f(x,beta1,beta2,beta3),
+                  data = Chwirut2,
+                  start = malla,
+                  algorithm = "brute-force")
+sub_model
+```
+
+
+Puede observarse que el algoritmo llega a la convergencia en 500 iteraciones, para obtener valores iniciales de los coeficientes iguales a $\beta_1=0.10$, $\beta_2=0.01$ y $\beta_3=0.10$. Encontrados estos valores iniciales, procederemos a minimizar la suma de cuadrados de los residuales (RSS por sus siglas en inglés):
+
+
+```{r}
+model <- nls(y~f(x,beta1,beta2,beta3),
+             data = Chwirut2,
+             start = list(beta1 = 0.10,
+                          beta2 = 0.01,
+                          beta3 = 0.10))
+summary(model)
+```
+
+
+Observemos el gráfico de contornos de la RSS en función de los coeficientes ajustados:
+
+
+```{r, fig.align='center'}
+library(nlstools)
+contourmodel <- nlsContourRSS(model)
+plot(contourmodel, col = F, nlev = 10)
+```
+
+
+Obsérvese como se ha optimizado el valor de los predictores a fin de minimizar la suma de cuadrados de los residuales. Ahora procederemos a sobreponer la curva ajustada a los datos experimentales
+
+
+```{r, fig.align='center'}
+plot(y~x, data = Chwirut2,
+     main = "Respuesta ultrasónica (NIST)",
+     xlab = "Distancia del metal (mm)",
+     ylab = "Respuesta ultrasónica",
+     ylim = c(0,100))
+metaldistance <- with(Chwirut2, seq(min(x), max(x), 
+                                    length.out = 100))
+lines(metaldistance, predict(model,
+                             newdata = 
+                               data.frame(x = metaldistance)))
+```
+

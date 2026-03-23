@@ -1,0 +1,80 @@
+---
+title: "Red neuronal (problema de clasificación)"
+author: "Félix R. Millán Trujillo"
+date: "15 de septiembre de 2020"
+output: html_document
+---
+
+## Planteamiento del problema
+
+En este problema, se evalúa el ingreso a la universidad de estudiantes, en función de sus habilidades técnicas y de comunicación
+
+## Definición de los datos y construcción del *dataframe*
+
+### Habilidades técnicas
+
+```{r}
+HTEC <- c(20,10,30,20,80,30)
+HTEC
+```
+
+### Habilidades de comunicación
+
+```{r}
+HCOM <- c(90,20,40,50,50,80)
+HCOM
+```
+
+### Ingreso a la universidad: ingresa (1), no ingresa (0).
+
+```{r}
+IUNI <- c(1,0,0,0,1,1)
+IUNI
+```
+
+### Dataframe para el entrenamiento
+
+```{r}
+train_data <- data.frame(HTEC,HCOM,IUNI)
+train_data
+```
+
+## Entrenamiento de la red
+
+```{r}
+library(neuralnet)
+nn <- neuralnet(IUNI~HTEC+HCOM,
+                data=train_data,
+                hidden = 5,
+                act.fct = "logistic")
+plot(nn)
+pred <- nn$net.result
+pred
+```
+
+```{r echo=FALSE,fig.align='center'}
+knitr::include_graphics("/home/profesor/Imágenes/red de clasificacion.png")
+```
+
+## Evaluación de la red entrenada con nuevos datos
+
+```{r}
+IUNI_test <- c(40,55,60)
+HTEC_test <- c(45,23,47)
+
+# Importante: agrupar estos vectores como dataframe
+
+TEST <- data.frame(IUNI_test,HTEC_test)
+TEST
+
+predicted <- compute(nn,TEST)
+predicted
+```
+
+Como es una red de clasificación, donde los estudiantes ingresan(1) ó no ingresan (0) a la universidad. Los resultados deben ser ajustados, ya que la red predice valores entre 0 y 1.
+
+```{r}
+prob <- predicted$net.result
+results <- ifelse(prob>0.5,1,0)
+results
+```
